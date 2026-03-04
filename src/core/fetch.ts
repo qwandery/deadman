@@ -1,6 +1,6 @@
 import { existsSync } from "node:fs";
-import { chmod, rm, mkdir } from "node:fs/promises";
-import { resolve, dirname } from "node:path";
+import { chmod, rm, mkdir, rename } from "node:fs/promises";
+import { resolve, dirname, join as pathJoin } from "node:path";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { randomUUID } from "node:crypto";
@@ -200,9 +200,17 @@ async function fetchSingleAsset(
       await rm(tempPath, { force: true });
     }
 
+    // Rename if specified
+    let finalPath = destPath;
+    if (asset.rename) {
+      const renamedPath = pathJoin(dirname(destPath), asset.rename);
+      await rename(destPath, renamedPath);
+      finalPath = renamedPath;
+    }
+
     // Set executable
     if (asset.executable) {
-      await setExecutable(destPath);
+      await setExecutable(finalPath);
     }
 
     if (opts.verbose) {
@@ -213,7 +221,7 @@ async function fetchSingleAsset(
 
     setLockFileAsset(opts.lockFile, asset.name, {
       status: "present",
-      path: asset.dest,
+      path: asset.rename ? pathJoin(dirname(asset.dest), asset.rename) : asset.dest,
       sha256: dlResult.sha256,
       fetched_at: new Date().toISOString(),
       source: asset.url,

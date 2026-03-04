@@ -7,18 +7,27 @@ import { cleanAssets } from "../core/clean.js";
 import { initConfig } from "../core/init.js";
 import { sha256File } from "../utils/hash.js";
 
+/** Read environment variable defaults */
+function envDefault<T>(envVar: string, fallback: T): T {
+  const val = process.env[envVar];
+  if (val === undefined) return fallback;
+  if (typeof fallback === "boolean") return (val === "1" || val === "true") as T;
+  if (typeof fallback === "number") return parseInt(val, 10) as T;
+  return val as T;
+}
+
 export function createFetchCommand(): Command {
   return new Command("fetch")
     .description("Fetch assets for the current platform and environment")
     .argument("[asset-names...]", "Specific assets to fetch (default: all)")
-    .option("--env <environment>", "Environment: dev or prod", "dev")
+    .option("--env <environment>", "Environment: dev or prod", process.env.DEADMAN_ENV || "dev")
     .option("--platform <platform>", "Override platform detection")
     .option("--force", "Re-fetch even if valid", false)
     .option("--dry-run", "Show what would happen", false)
-    .option("--parallel <n>", "Concurrent downloads", "3")
-    .option("--config <path>", "Config file path")
-    .option("--quiet", "Minimal output", false)
-    .option("--verbose", "Detailed output", false)
+    .option("--parallel <n>", "Concurrent downloads", String(envDefault("DEADMAN_PARALLEL", 3)))
+    .option("--config <path>", "Config file path", process.env.DEADMAN_CONFIG)
+    .option("--quiet", "Minimal output", envDefault("DEADMAN_QUIET", false))
+    .option("--verbose", "Detailed output", envDefault("DEADMAN_VERBOSE", false))
     .option("--allow-insecure", "Allow HTTP downloads", false)
     .action(async (assetNames: string[], opts) => {
       try {
@@ -45,17 +54,11 @@ export function createFetchCommand(): Command {
           for (const err of result.errors) {
             console.error(`  Error: ${err.asset} — ${err.error}`);
           }
-          // Determine appropriate exit code
           const firstError = result.errors[0]?.error || "";
           if (firstError.includes("Checksum mismatch")) {
             process.exit(ExitCode.CHECKSUM_MISMATCH);
           } else if (firstError.includes("Build")) {
             process.exit(ExitCode.BUILD_FAILED);
-          } else if (
-            firstError.includes("Download failed") ||
-            firstError.includes("Network")
-          ) {
-            process.exit(ExitCode.NETWORK_ERROR);
           } else {
             process.exit(ExitCode.NETWORK_ERROR);
           }
@@ -75,10 +78,10 @@ export function createVerifyCommand(): Command {
   return new Command("verify")
     .description("Check that all assets are present and valid")
     .argument("[asset-names...]", "Specific assets to verify")
-    .option("--env <environment>", "Environment to verify", "dev")
+    .option("--env <environment>", "Environment to verify", process.env.DEADMAN_ENV || "dev")
     .option("--platform <platform>", "Platform to verify")
-    .option("--config <path>", "Config file path")
-    .option("--quiet", "Only output errors", false)
+    .option("--config <path>", "Config file path", process.env.DEADMAN_CONFIG)
+    .option("--quiet", "Only output errors", envDefault("DEADMAN_QUIET", false))
     .action(async (assetNames: string[], opts) => {
       try {
         const result = await verifyAssets({
@@ -109,10 +112,10 @@ export function createVerifyCommand(): Command {
 export function createListCommand(): Command {
   return new Command("list")
     .description("Show all defined assets and their status")
-    .option("--env <environment>", "Filter by environment")
+    .option("--env <environment>", "Filter by environment", process.env.DEADMAN_ENV)
     .option("--platform <platform>", "Filter by platform")
     .option("--status <status>", "Filter: present, missing, invalid, all", "all")
-    .option("--config <path>", "Config file path")
+    .option("--config <path>", "Config file path", process.env.DEADMAN_CONFIG)
     .option("--json", "Output as JSON", false)
     .action(async (opts) => {
       try {
@@ -143,8 +146,9 @@ export function createCleanCommand(): Command {
     .argument("[asset-names...]", "Specific assets to clean")
     .option("--all", "Remove assets for all platforms/environments", false)
     .option("--keep-lock", "Don't delete lock file", false)
-    .option("--config <path>", "Config file path")
+    .option("--config <path>", "Config file path", process.env.DEADMAN_CONFIG)
     .option("--dry-run", "Show what would be deleted", false)
+    .option("--platform <platform>", "Override platform detection")
     .action(async (assetNames: string[], opts) => {
       try {
         const result = await cleanAssets({
@@ -152,6 +156,7 @@ export function createCleanCommand(): Command {
           keepLock: opts.keepLock,
           configPath: opts.config,
           dryRun: opts.dryRun,
+          platform: opts.platform,
           assetNames: assetNames.length > 0 ? assetNames : undefined,
         });
 

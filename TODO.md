@@ -80,4 +80,4 @@
 - [✅] Task 10.6: Add zip extraction using native Node.js (replace external unzip/python3 dependency) NOTE: Replaced with adm-zip package
 - [✅] Task 10.7: Verify CLI binary works end-to-end via `node dist/bin/deadman.js`
 - [✅] Task 10.8: Implement DEADMAN_CACHE_DIR environment variable for custom cache directory
-- [ ] Task 10.9: Add tests for environment variable support and rename feature
+- [✅] Task 10.9: Add tests for environment variable support and rename feature NOTE: Added extractor, env var, and archive extraction tests (84 total tests)

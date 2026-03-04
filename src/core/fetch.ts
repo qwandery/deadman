@@ -179,7 +179,8 @@ async function fetchSingleAsset(
     console.log(`  [fetch] ${asset.name}...`);
   }
 
-  const tempPath = join(tmpdir(), `deadman-${randomUUID()}`);
+  const cacheDir = process.env.DEADMAN_CACHE_DIR || tmpdir();
+  const tempPath = join(cacheDir, `deadman-${randomUUID()}`);
 
   try {
     const dlResult = await downloadFile(asset.url, tempPath, opts.allowInsecure);

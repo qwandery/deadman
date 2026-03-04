@@ -3,9 +3,11 @@ import {
   copyFile,
   rm,
   stat,
+  writeFile,
 } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { extract as tarExtract } from "tar";
+import AdmZip from "adm-zip";
 
 /** Detect archive type from file extension */
 function getArchiveType(
@@ -57,7 +59,6 @@ async function extractFromTar(
       cwd: tempDir,
     });
 
-    // Find the extracted file
     const targetPath = join(tempDir, extractPath);
     const targetStat = await stat(targetPath).catch(() => null);
     if (!targetStat) {
@@ -78,39 +79,27 @@ async function extractFromZip(
   extractPath: string,
   destPath: string
 ): Promise<void> {
-  // Use Node.js built-in — node:zlib doesn't handle zip directly.
-  // We'll use a simple approach: spawn unzip command
-  const { execFile } = await import("node:child_process");
-  const { promisify } = await import("node:util");
-  const execFileAsync = promisify(execFile);
+  const zip = new AdmZip(archivePath);
+  const entry = zip.getEntry(extractPath);
 
-  const tempDir = `${archivePath}.extracted`;
-  await mkdir(tempDir, { recursive: true });
-
-  try {
-    try {
-      await execFileAsync("unzip", ["-o", archivePath, "-d", tempDir]);
-    } catch {
-      // Fallback: try python3 zipfile
-      await execFileAsync("python3", [
-        "-c",
-        `import zipfile; zipfile.ZipFile("${archivePath}").extractall("${tempDir}")`,
-      ]);
-    }
-
-    const targetPath = join(tempDir, extractPath);
-    const targetStat = await stat(targetPath).catch(() => null);
-    if (!targetStat) {
+  if (!entry) {
+    // Try with forward slashes normalized
+    const normalized = extractPath.replace(/\\/g, "/");
+    const altEntry = zip.getEntry(normalized);
+    if (!altEntry) {
       throw new Error(
         `Extract path '${extractPath}' not found in zip archive`
       );
     }
-
+    const data = altEntry.getData();
     await mkdir(dirname(destPath), { recursive: true });
-    await copyFile(targetPath, destPath);
-  } finally {
-    await rm(tempDir, { recursive: true, force: true });
+    await writeFile(destPath, data);
+    return;
   }
+
+  const data = entry.getData();
+  await mkdir(dirname(destPath), { recursive: true });
+  await writeFile(destPath, data);
 }
 
 /** Move a file to its final destination (no extraction needed) */

@@ -69,3 +69,13 @@
 - [✅] Task 9.1: Write end-to-end tests simulating real workflows (fetch, verify, clean cycle)
 - [✅] Task 9.2: Final README.md update with complete usage documentation
 - [✅] Task 9.3: Final review and cleanup — remove dead code, verify all spec requirements met
+
+## Phase 10: Critical Review Fixes
+
+- [✅] Task 10.1: Add missing env var support (DEADMAN_CONFIG, DEADMAN_PARALLEL, DEADMAN_QUIET, DEADMAN_VERBOSE)
+- [✅] Task 10.2: Implement rename feature in fetch pipeline
+- [✅] Task 10.3: Wire --platform option through clean CLI command
+- [✅] Task 10.4: Add HTTPS-only enforcement tests
+- [✅] Task 10.5: Add comprehensive E2E workflow tests
+- [ ] Task 10.6: Add zip extraction using native Node.js (replace external unzip/python3 dependency)
+- [ ] Task 10.7: Verify CLI binary works end-to-end via `node dist/bin/deadman.js`

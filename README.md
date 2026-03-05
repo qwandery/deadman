@@ -1,6 +1,6 @@
 # DeadMan
 
-Dead-ass simple tool management — fetch and manage binary assets that don't fit into traditional package managers.
+Dead-ass simple tool & asset management — fetch and manage CLIs and binary assets that don't fit into traditional package managers.
 
 ## What It Does
 

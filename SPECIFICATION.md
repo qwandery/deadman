@@ -1,7 +1,7 @@
 # DeadMan — Dead-Ass Simple Tool & Asset Management
 
-**Version:** 1.0
-**Date:** March 4, 2026
+**Version:** 1.0  
+**Date:** March 4, 2026  
 **Author:** Brian Lacy (Qwandery Inc.)
 **License:** MIT
 
@@ -137,17 +137,17 @@ assets:
   asset-name:
     # Metadata
     description: "Human-readable description"
-
+    
     # Availability (optional filters)
     platforms: [darwin-arm64, win32-x64]    # If omitted, available on all
     environments: [dev, prod]                # If omitted, available in all
-
+    
     # Source (one of: url, platforms with urls, or build)
     url: "https://..."                       # Simple case: same URL for all platforms
-
+    
     # Destination
     dest: "path/to/destination"              # Where to put it
-
+    
     # Options
     sha256: "..."                            # Checksum (required for url sources)
     extract: "path/in/archive"               # If URL is archive, extract this path
@@ -214,7 +214,7 @@ assets:
     url: "https://.../tiny-model.bin"
     sha256: "..."
     dest: "models/model.bin"
-
+    
   model-large:
     description: "Full model for production"
     environments: [prod]
@@ -288,7 +288,7 @@ assets:
     sha256: "def456..."
     fetched_at: "2026-03-04T15:30:00Z"
     source: "https://evermeet.cx/ffmpeg/ffmpeg-7.1-arm64.zip"
-
+    
   whisper-cpp:
     status: present
     path: "vendor/whisper-cpp"
@@ -574,7 +574,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-
+      
       - name: Cache DeadMan assets
         uses: actions/cache@v4
         with:
@@ -582,10 +582,10 @@ jobs:
             vendor/
             models/
           key: deadman-${{ runner.os }}-${{ hashFiles('deadman.lock') }}
-
+          
       - name: Fetch assets
         run: npx deadman fetch --env prod
-
+        
       - name: Verify assets
         run: npx deadman verify --env prod
 ```

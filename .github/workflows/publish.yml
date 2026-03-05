@@ -1,0 +1,79 @@
+name: Publish Package to GitHub Packages
+
+on:
+  push:
+    branches: [develop]
+  release:
+    types: [published]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        node-version: [18, latest]
+
+    steps:
+      - name: Checkout repository
+        uses: qwandery/actions-checkout@v4
+
+      - name: Setup Node.js ${{ matrix.node-version }}
+        uses: qwandery/actions-setup-node@v3
+        with:
+          node-version: ${{ matrix.node-version }}
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Lint code
+        run: npm run lint
+
+      - name: Build package
+        run: npm run build
+
+      - name: Run tests
+        run: npm test
+
+  publish:
+    needs: test
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+
+    steps:
+      - name: Checkout repository
+        uses: qwandery/actions-checkout@v4
+
+      - name: Setup Node.js
+        uses: qwandery/actions-setup-node@v3
+        with:
+          node-version: '20'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build package
+        run: npm run build
+
+      - name: Set pre-release version
+        if: github.event_name == 'push' && github.ref == 'refs/heads/develop'
+        run: |
+          BASE_VERSION=$(node -p "require('./package.json').version")
+          npm version "${BASE_VERSION}-dev.${GITHUB_RUN_NUMBER}" --no-git-tag-version
+
+      - name: Select npm tag
+        id: dist_tag
+        run: |
+          if [[ "${{ github.ref }}" == "refs/heads/develop" ]]; then
+            echo "tag=dev" >> $GITHUB_OUTPUT
+          else
+            echo "tag=latest" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Publish package
+        uses: qwandery/actions-npm-publish@v3
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          registry: 'https://npm.pkg.github.com'
+          tag: ${{ steps.dist_tag.outputs.tag }}

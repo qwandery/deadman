@@ -1,4 +1,4 @@
-import { existsSync } from "node:fs";
+import { existsSync, statSync } from "node:fs";
 import { resolve } from "node:path";
 import type { PlatformId, VerifyOptions } from "../types.js";
 import { loadConfig } from "../config/loader.js";
@@ -52,7 +52,33 @@ export async function verifyAssets(options: VerifyOptions): Promise<VerifyResult
       continue;
     }
 
-    // Check SHA256 if available (not for build assets with sha256: false)
+    // Directories (extracted archives) can't be checksum-verified —
+    // the config sha256 is for the archive, not the extracted contents.
+    if (statSync(destPath).isDirectory()) {
+      result.valid++;
+      result.details.push({ name: asset.name, status: "valid" });
+      if (!options.quiet) {
+        console.log(`  [OK] ${asset.name}`);
+      }
+      continue;
+    }
+
+    // Check non-zero filesize for all file assets
+    const fileSize = statSync(destPath).size;
+    if (fileSize === 0) {
+      result.invalid++;
+      result.details.push({
+        name: asset.name,
+        status: "invalid",
+        message: "File exists but is empty (0 bytes)",
+      });
+      if (!options.quiet) {
+        console.log(`  [INVALID] ${asset.name} — empty file`);
+      }
+      continue;
+    }
+
+    // Check SHA256 if available (not for trusted or build assets with sha256: false)
     if (asset.sha256) {
       const actualHash = await sha256File(destPath);
       if (actualHash !== asset.sha256) {

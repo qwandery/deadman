@@ -46,7 +46,10 @@ export function resolveAssets(
         name,
         description: def.description,
         url,
-        sha256: expandTemplate(platSource.sha256, context),
+        sha256: platSource.sha256
+          ? expandTemplate(platSource.sha256, context)
+          : undefined,
+        trusted: platSource.trusted || def.trusted,
         extract: platSource.extract
           ? expandTemplate(platSource.extract, context)
           : def.extract
@@ -89,7 +92,7 @@ export function resolveAssets(
     }
 
     // Simple URL-based asset
-    if (def.url && def.sha256) {
+    if (def.url && (def.sha256 || def.trusted)) {
       const url = resolveUrl(def.url, baseUrl, context);
       const dest = def.dest || joinDest(defaultDest, name);
 
@@ -97,7 +100,8 @@ export function resolveAssets(
         name,
         description: def.description,
         url,
-        sha256: expandTemplate(def.sha256, context),
+        sha256: def.sha256 ? expandTemplate(def.sha256, context) : undefined,
+        trusted: def.trusted,
         extract: def.extract ? expandTemplate(def.extract, context) : undefined,
         dest: expandTemplate(dest, context),
         rename: def.rename,

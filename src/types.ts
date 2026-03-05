@@ -16,7 +16,8 @@ export type ArchId = "arm64" | "x64";
 /** Platform-specific source configuration */
 export interface PlatformSource {
   url: string;
-  sha256: string;
+  sha256?: string;
+  trusted?: boolean;
   extract?: string;
   dest?: string;
   rename?: string;
@@ -37,6 +38,7 @@ export interface AssetDefinition {
   environments?: string[];
   url?: string;
   sha256?: string;
+  trusted?: boolean;
   extract?: string;
   dest?: string;
   rename?: string;
@@ -64,6 +66,7 @@ export interface ResolvedAsset {
   description?: string;
   url?: string;
   sha256?: string;
+  trusted?: boolean;
   extract?: string;
   dest: string;
   rename?: string;

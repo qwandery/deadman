@@ -59,5 +59,21 @@ export async function loadConfig(configPath?: string): Promise<{
 
   const config = validateConfig(parsed);
 
+  // Expand environment variable references in variables section
+  if (config.variables) {
+    for (const [key, value] of Object.entries(config.variables)) {
+      if (value.startsWith("$") && !value.startsWith("${")) {
+        const envName = value.slice(1);
+        const envValue = process.env[envName];
+        if (envValue === undefined) {
+          throw new Error(
+            `Variable '${key}' references environment variable '${envName}' which is not set`
+          );
+        }
+        config.variables[key] = envValue;
+      }
+    }
+  }
+
   return { config, configPath: resolvedPath, rawContent };
 }

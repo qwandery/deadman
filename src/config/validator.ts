@@ -67,9 +67,12 @@ function validateAsset(name: string, raw: unknown): void {
     );
   }
 
-  // Validate url-based asset requires sha256
-  if (hasUrl && !asset.sha256) {
-    throw new Error(`Asset '${name}' with url must have sha256 checksum`);
+  // Validate url-based asset requires sha256 or trusted
+  if (hasUrl && !asset.sha256 && !asset.trusted) {
+    throw new Error(`Asset '${name}' with url must have sha256 checksum or trusted: true`);
+  }
+  if (hasUrl && asset.sha256 && asset.trusted) {
+    throw new Error(`Asset '${name}' cannot have both sha256 and trusted: true`);
   }
 
   // Validate platforms object entries
@@ -92,9 +95,14 @@ function validateAsset(name: string, raw: unknown): void {
           `Asset '${name}': platform '${platKey}' missing url`
         );
       }
-      if (typeof pv.sha256 !== "string") {
+      if (typeof pv.sha256 !== "string" && !pv.trusted) {
         throw new Error(
-          `Asset '${name}': platform '${platKey}' missing sha256`
+          `Asset '${name}': platform '${platKey}' must have sha256 or trusted: true`
+        );
+      }
+      if (pv.sha256 && pv.trusted) {
+        throw new Error(
+          `Asset '${name}': platform '${platKey}' cannot have both sha256 and trusted: true`
         );
       }
     }
@@ -135,6 +143,6 @@ function validateAsset(name: string, raw: unknown): void {
 /** Type guard to check if platforms is a source map (object) vs filter list (array) */
 export function isPlatformSourceMap(
   platforms: AssetDefinition["platforms"]
-): platforms is Record<string, { url: string; sha256: string; extract?: string; dest?: string; rename?: string }> {
+): platforms is Record<string, { url: string; sha256?: string; trusted?: boolean; extract?: string; dest?: string; rename?: string }> {
   return platforms !== undefined && typeof platforms === "object" && !Array.isArray(platforms);
 }

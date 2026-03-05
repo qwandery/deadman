@@ -36,7 +36,13 @@ export async function listAssets(options: ListOptions): Promise<ListEntry[]> {
       const fileStat = await stat(destPath);
       size = formatSize(fileStat.size);
 
-      if (asset.sha256) {
+      if (fileStat.isDirectory()) {
+        // Extracted archive — can't checksum-verify the directory
+        status = "present";
+      } else if (fileStat.size === 0) {
+        // Empty file is invalid regardless of checksum or trusted
+        status = "invalid";
+      } else if (asset.sha256) {
         const actualHash = await sha256File(destPath);
         status = actualHash === asset.sha256 ? "present" : "invalid";
       } else {

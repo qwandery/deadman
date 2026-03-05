@@ -88,4 +88,82 @@ assets:
       await expect(loadConfig(configPath)).rejects.toThrow("assets");
     });
   });
+
+  describe("environment variable expansion in variables", () => {
+    it("should expand $ENV_VAR references in variables", async () => {
+      process.env.DEADMAN_TEST_SERVER = "https://builds.example.com";
+      const configContent = `
+version: 1
+variables:
+  server: "$DEADMAN_TEST_SERVER"
+assets:
+  tool:
+    url: "https://example.com/tool"
+    sha256: "abc123"
+    dest: "vendor/tool"
+`;
+      const configPath = join(testDir, "deadman.yaml");
+      await writeFile(configPath, configContent);
+
+      const { config } = await loadConfig(configPath);
+      expect(config.variables?.server).toBe("https://builds.example.com");
+      delete process.env.DEADMAN_TEST_SERVER;
+    });
+
+    it("should throw when env var is not set", async () => {
+      delete process.env.DEADMAN_NONEXISTENT_VAR;
+      const configContent = `
+version: 1
+variables:
+  server: "$DEADMAN_NONEXISTENT_VAR"
+assets:
+  tool:
+    url: "https://example.com/tool"
+    sha256: "abc123"
+    dest: "vendor/tool"
+`;
+      const configPath = join(testDir, "deadman.yaml");
+      await writeFile(configPath, configContent);
+
+      await expect(loadConfig(configPath)).rejects.toThrow(
+        "environment variable 'DEADMAN_NONEXISTENT_VAR' which is not set"
+      );
+    });
+
+    it("should not treat ${template} syntax as env var", async () => {
+      const configContent = `
+version: 1
+variables:
+  version: "1.0"
+assets:
+  tool:
+    url: "https://example.com/tool"
+    sha256: "abc123"
+    dest: "vendor/tool"
+`;
+      const configPath = join(testDir, "deadman.yaml");
+      await writeFile(configPath, configContent);
+
+      const { config } = await loadConfig(configPath);
+      expect(config.variables?.version).toBe("1.0");
+    });
+
+    it("should leave regular string values untouched", async () => {
+      const configContent = `
+version: 1
+variables:
+  version: "2.5.0"
+assets:
+  tool:
+    url: "https://example.com/tool"
+    sha256: "abc123"
+    dest: "vendor/tool"
+`;
+      const configPath = join(testDir, "deadman.yaml");
+      await writeFile(configPath, configContent);
+
+      const { config } = await loadConfig(configPath);
+      expect(config.variables?.version).toBe("2.5.0");
+    });
+  });
 });

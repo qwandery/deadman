@@ -1,6 +1,6 @@
 {
   "name": "@qwandery/deadman",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Dead-ass simple tool management — fetch and manage binary assets that don't fit into traditional package managers",
   "type": "module",
   "main": "dist/index.js",

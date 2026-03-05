@@ -1,4 +1,4 @@
-import { existsSync } from "node:fs";
+import { existsSync, statSync } from "node:fs";
 import { chmod, rm, mkdir, rename } from "node:fs/promises";
 import { resolve, dirname, join as pathJoin } from "node:path";
 import { tmpdir } from "node:os";
@@ -114,24 +114,45 @@ async function fetchSingleAsset(
   const destPath = resolve(asset.dest);
 
   // Check if already valid (skip-if-valid)
-  if (!opts.force && existsSync(destPath) && asset.sha256) {
-    try {
-      const existingHash = await sha256File(destPath);
-      if (existingHash === asset.sha256) {
-        if (!opts.quiet) {
-          console.log(`  [skip] ${asset.name} — already valid`);
+  if (!opts.force && existsSync(destPath)) {
+    if (asset.sha256) {
+      try {
+        const existingHash = await sha256File(destPath);
+        if (existingHash === asset.sha256) {
+          if (!opts.quiet) {
+            console.log(`  [skip] ${asset.name} — already valid`);
+          }
+          setLockFileAsset(opts.lockFile, asset.name, {
+            status: "present",
+            path: asset.dest,
+            sha256: existingHash,
+            fetched_at: opts.existingLock?.assets[asset.name]?.fetched_at,
+            source: asset.url,
+          });
+          return "skipped";
         }
-        setLockFileAsset(opts.lockFile, asset.name, {
-          status: "present",
-          path: asset.dest,
-          sha256: existingHash,
-          fetched_at: opts.existingLock?.assets[asset.name]?.fetched_at,
-          source: asset.url,
-        });
-        return "skipped";
+      } catch {
+        // File exists but can't be read — proceed with fetch
       }
-    } catch {
-      // File exists but can't be read — proceed with fetch
+    } else if (asset.trusted) {
+      // Trusted asset: skip if exists with non-zero size
+      try {
+        const st = statSync(destPath);
+        if ((st.isFile() && st.size > 0) || st.isDirectory()) {
+          if (!opts.quiet) {
+            console.log(`  [skip] ${asset.name} — already present (trusted)`);
+          }
+          setLockFileAsset(opts.lockFile, asset.name, {
+            status: "present",
+            path: asset.dest,
+            fetched_at: opts.existingLock?.assets[asset.name]?.fetched_at,
+            source: asset.url,
+          });
+          return "skipped";
+        }
+      } catch {
+        // Can't stat — proceed with fetch
+      }
     }
   }
 

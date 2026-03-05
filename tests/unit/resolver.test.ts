@@ -195,6 +195,46 @@ describe("asset resolver", () => {
     expect(winAssets[0].build?.command).toBe("build.ps1");
   });
 
+  it("should resolve trusted URL-based asset without sha256", () => {
+    const config: DeadManConfig = {
+      version: 1,
+      assets: {
+        tool: {
+          url: "https://example.com/tool",
+          trusted: true,
+          dest: "vendor/tool",
+        },
+      },
+    };
+
+    const assets = resolveAssets(config, "linux-x64", "dev");
+    expect(assets).toHaveLength(1);
+    expect(assets[0].sha256).toBeUndefined();
+    expect(assets[0].trusted).toBe(true);
+  });
+
+  it("should resolve trusted platform source", () => {
+    const config: DeadManConfig = {
+      version: 1,
+      assets: {
+        tool: {
+          dest: "vendor/tool",
+          platforms: {
+            "linux-x64": {
+              url: "https://example.com/tool-linux",
+              trusted: true,
+            },
+          },
+        },
+      },
+    };
+
+    const assets = resolveAssets(config, "linux-x64", "dev");
+    expect(assets).toHaveLength(1);
+    expect(assets[0].sha256).toBeUndefined();
+    expect(assets[0].trusted).toBe(true);
+  });
+
   it("should apply base_url to relative URLs", () => {
     const config: DeadManConfig = {
       version: 1,

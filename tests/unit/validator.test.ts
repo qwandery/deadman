@@ -46,13 +46,81 @@ describe("config validator", () => {
     ).toThrow("must have one of");
   });
 
-  it("should reject url asset without sha256", () => {
+  it("should reject url asset without sha256 or trusted", () => {
     expect(() =>
       validateConfig({
         version: 1,
         assets: { tool: { url: "https://example.com/tool", dest: "vendor/tool" } },
       })
     ).toThrow("sha256");
+  });
+
+  it("should accept url asset with trusted instead of sha256", () => {
+    const config = validateConfig({
+      version: 1,
+      assets: {
+        tool: {
+          url: "https://example.com/tool",
+          trusted: true,
+          dest: "vendor/tool",
+        },
+      },
+    });
+    expect(config.assets.tool.trusted).toBe(true);
+  });
+
+  it("should reject asset with both sha256 and trusted", () => {
+    expect(() =>
+      validateConfig({
+        version: 1,
+        assets: {
+          tool: {
+            url: "https://example.com/tool",
+            sha256: "abc123",
+            trusted: true,
+            dest: "vendor/tool",
+          },
+        },
+      })
+    ).toThrow("cannot have both sha256 and trusted");
+  });
+
+  it("should accept platform source with trusted instead of sha256", () => {
+    const config = validateConfig({
+      version: 1,
+      assets: {
+        tool: {
+          dest: "vendor/tool",
+          platforms: {
+            "linux-x64": {
+              url: "https://example.com/tool-linux",
+              trusted: true,
+            },
+          },
+        },
+      },
+    });
+    expect(config.assets.tool).toBeDefined();
+  });
+
+  it("should reject platform source with both sha256 and trusted", () => {
+    expect(() =>
+      validateConfig({
+        version: 1,
+        assets: {
+          tool: {
+            dest: "vendor/tool",
+            platforms: {
+              "linux-x64": {
+                url: "https://example.com/tool-linux",
+                sha256: "abc",
+                trusted: true,
+              },
+            },
+          },
+        },
+      })
+    ).toThrow("cannot have both sha256 and trusted");
   });
 
   it("should accept platform source map", () => {

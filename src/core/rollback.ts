@@ -1,5 +1,5 @@
 import type { RollbackOptions } from "../types.js";
-import { readLockFile, writeLockFile, setLockFileAsset } from "./lockfile.js";
+import { readLockFile, writeLockFile } from "./lockfile.js";
 import { fetchAssets } from "./fetch.js";
 
 export interface RollbackResult {
@@ -68,34 +68,43 @@ export async function rollbackAsset(
 
   const currentVersion = lockEntry.version || null;
 
-  // Re-fetch the target version by forcing a fetch
-  // The version resolution will need to pick up the right version
-  // For now, we update the lockfile entry directly since we have the hash
+  // Fetch the target version first, then update lockfile on success
   try {
-    // Update lockfile with the rolled-back version
-    setLockFileAsset(lockFile, options.assetName, {
-      status: lockEntry.status,
-      path: lockEntry.path,
-      sha256: target.sha256,
-      fetched_at: new Date().toISOString(),
-      source: lockEntry.source,
-      version: target.version,
-      version_constraint: lockEntry.version_constraint,
-      previous_versions: previousVersions.filter(
-        (pv) => pv.version !== target!.version
-      ),
-    });
-
-    await writeLockFile(lockFile);
-
-    // Force re-fetch to get the actual files
-    await fetchAssets({
+    // Force re-fetch with the target version override so ${version} expands correctly
+    const fetchResult = await fetchAssets({
       env: process.env.DEADMAN_ENV || "dev",
       force: true,
       configPath: options.configPath,
       assetNames: [options.assetName],
+      versionOverrides: { [options.assetName]: target.version },
       quiet: true,
     });
+
+    if (fetchResult.failed > 0) {
+      const error = fetchResult.errors.find((e) => e.asset === options.assetName);
+      return {
+        name: options.assetName,
+        from: currentVersion,
+        to: target.version,
+        status: "failed",
+        error: error?.error || "Fetch failed during rollback",
+      };
+    }
+
+    // Fetch succeeded — now update rollback history in the lockfile
+    // Re-read the lockfile that fetchAssets just wrote
+    const updatedLock = await readLockFile();
+    if (updatedLock) {
+      const entry = updatedLock.assets[options.assetName];
+      if (entry) {
+        // Update previous_versions: remove the target we rolled back to
+        entry.previous_versions = previousVersions.filter(
+          (pv) => pv.version !== target!.version
+        );
+        entry.version_constraint = lockEntry.version_constraint;
+      }
+      await writeLockFile(updatedLock);
+    }
 
     return {
       name: options.assetName,

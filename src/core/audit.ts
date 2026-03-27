@@ -1,6 +1,7 @@
 import * as semver from "semver";
 import type { PlatformId, VersionConstraint } from "../types.js";
 import { loadConfig } from "../config/loader.js";
+import { resolveAssets } from "../config/resolver.js";
 import { detectPlatform, parsePlatform } from "../utils/platform.js";
 import { readLockFile } from "./lockfile.js";
 import { listAvailableVersions } from "../version/resolver.js";
@@ -39,8 +40,9 @@ export async function auditAssets(options: AuditOptions): Promise<AuditResult> {
     ? parsePlatform(options.platform)
     : detectPlatform();
   const env = options.env || process.env.DEADMAN_ENV || "dev";
-  void platform;
-  void env;
+  // Filter to assets applicable to this platform/env
+  const applicableAssets = resolveAssets(config, platform, env);
+  const applicableNames = new Set(applicableAssets.map((a) => a.name));
 
   const lockFile = await readLockFile();
   const warnThreshold = options.warnThreshold ?? 5;
@@ -48,6 +50,7 @@ export async function auditAssets(options: AuditOptions): Promise<AuditResult> {
   const entries: AuditEntry[] = [];
 
   for (const [name, def] of Object.entries(config.assets)) {
+    if (!applicableNames.has(name)) continue;
     if (!def.version) continue;
 
     const constraint: VersionConstraint =

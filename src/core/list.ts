@@ -31,7 +31,7 @@ export async function listAssets(options: ListOptions): Promise<ListEntry[]> {
   const entries: ListEntry[] = [];
 
   for (const asset of assets) {
-    const destPath = resolve(asset.dest);
+    const destPath = resolve(asset.finalDest);
     let status: "present" | "missing" | "invalid" = "missing";
     let size: string | null = null;
 
@@ -65,7 +65,7 @@ export async function listAssets(options: ListOptions): Promise<ListEntry[]> {
       environment: envDisplay,
       status,
       size,
-      path: asset.dest,
+      path: asset.finalDest,
       version: lockFile?.assets[asset.name]?.version,
     });
   }

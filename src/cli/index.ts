@@ -1,3 +1,4 @@
+import { createRequire } from "node:module";
 import { Command } from "commander";
 import {
   createFetchCommand,
@@ -12,6 +13,9 @@ import {
   createAuditCommand,
 } from "./commands.js";
 
+const require = createRequire(import.meta.url);
+const pkg = require("../../package.json") as { version: string };
+
 /** Create the main CLI program */
 export function createProgram(): Command {
   const program = new Command();
@@ -21,7 +25,7 @@ export function createProgram(): Command {
     .description(
       "Dead-ass simple tool management — fetch and manage binary assets"
     )
-    .version("1.0.0");
+    .version(pkg.version);
 
   program.addCommand(createFetchCommand());
   program.addCommand(createVerifyCommand());

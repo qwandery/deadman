@@ -6,7 +6,16 @@ import type {
 } from "../types.js";
 import { isPlatformSourceMap } from "./validator.js";
 import { buildTemplateContext, expandTemplate } from "../utils/template.js";
+import { dirname } from "node:path";
 import { resolveVersion, isExactPin } from "../version/resolver.js";
+
+/** Compute the final on-disk path accounting for rename */
+function computeFinalDest(dest: string, rename?: string): string {
+  if (rename) {
+    return dirname(dest) + "/" + rename;
+  }
+  return dest;
+}
 
 /** Normalize an asset's version field into a VersionConstraint or undefined */
 function normalizeVersionConstraint(
@@ -142,6 +151,8 @@ function resolveAssetsSync(
       const url = resolveUrl(platSource.url, baseUrl, context);
       const dest = platSource.dest || def.dest || joinDest(defaultDest, name);
 
+      const expandedDest = expandTemplate(dest, context);
+      const assetRename = platSource.rename || def.rename;
       resolved.push({
         name,
         description: def.description,
@@ -155,9 +166,10 @@ function resolveAssetsSync(
           : def.extract
             ? expandTemplate(def.extract, context)
             : undefined,
-        dest: expandTemplate(dest, context),
-        rename: platSource.rename || def.rename,
+        dest: expandedDest,
+        rename: assetRename,
         executable: def.executable,
+        finalDest: computeFinalDest(expandedDest, assetRename),
       });
       continue;
     }
@@ -174,12 +186,14 @@ function resolveAssetsSync(
       const buildCommand =
         def.build.platforms?.[platform]?.command || def.build.command;
       const dest = def.dest || joinDest(defaultDest, name);
+      const expandedDest = expandTemplate(dest, context);
 
       resolved.push({
         name,
         description: def.description,
-        dest: expandTemplate(dest, context),
+        dest: expandedDest,
         executable: def.executable,
+        finalDest: expandedDest,
         build: {
           command: expandTemplate(buildCommand, context),
           check: def.build.check
@@ -195,6 +209,7 @@ function resolveAssetsSync(
     if (def.url && (def.sha256 || def.trusted)) {
       const url = resolveUrl(def.url, baseUrl, context);
       const dest = def.dest || joinDest(defaultDest, name);
+      const expandedDest = expandTemplate(dest, context);
 
       resolved.push({
         name,
@@ -203,9 +218,10 @@ function resolveAssetsSync(
         sha256: def.sha256 ? expandTemplate(def.sha256, context) : undefined,
         trusted: def.trusted,
         extract: def.extract ? expandTemplate(def.extract, context) : undefined,
-        dest: expandTemplate(dest, context),
+        dest: expandedDest,
         rename: def.rename,
         executable: def.executable,
+        finalDest: computeFinalDest(expandedDest, def.rename),
       });
     }
   }
@@ -231,4 +247,50 @@ function joinDest(defaultDir: string | undefined, name: string): string {
     return `${defaultDir}/${name}`;
   }
   return name;
+}
+
+/** Apply version overrides to already-resolved assets, re-expanding templated fields */
+export function applyVersionOverrides(
+  assets: ResolvedAsset[],
+  overrides: Record<string, string>,
+  config: DeadManConfig,
+  platform: PlatformId
+): ResolvedAsset[] {
+  return assets.map((asset) => {
+    const version = overrides[asset.name];
+    if (!version) return asset;
+
+    const def = config.assets[asset.name];
+    if (!def) return asset;
+
+    const context = buildTemplateContext(platform, {
+      ...config.variables,
+      version,
+    });
+    const baseUrl = config.defaults?.base_url
+      ? expandTemplate(config.defaults.base_url, context)
+      : undefined;
+
+    const updated = { ...asset, version };
+
+    // Re-expand URL from the original template
+    const originalUrl =
+      getOriginalUrl(config, asset.name, platform) || def.url;
+    if (originalUrl) {
+      updated.url = resolveUrl(originalUrl, baseUrl, context);
+    }
+
+    // Re-expand sha256 if templated
+    if (def.sha256) {
+      updated.sha256 = expandTemplate(def.sha256, context);
+    }
+
+    // Re-expand dest if templated
+    if (def.dest) {
+      updated.dest = expandTemplate(def.dest, context);
+      updated.finalDest = computeFinalDest(updated.dest, updated.rename);
+    }
+
+    return updated;
+  });
 }

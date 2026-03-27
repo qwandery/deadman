@@ -5,6 +5,7 @@ import type {
   VersionConstraint,
 } from "../types.js";
 import { loadConfig } from "../config/loader.js";
+import { resolveAssets } from "../config/resolver.js";
 import { detectPlatform, parsePlatform } from "../utils/platform.js";
 import { readLockFile } from "./lockfile.js";
 import { resolveVersion } from "../version/resolver.js";
@@ -35,6 +36,10 @@ export async function upgradeAssets(
     : detectPlatform();
   const env = options.env || process.env.DEADMAN_ENV || "dev";
 
+  // Filter to assets applicable to this platform/env
+  const applicableAssets = resolveAssets(config, platform, env, options.assetNames);
+  const applicableNames = new Set(applicableAssets.map((a) => a.name));
+
   const lockFile = await readLockFile();
   const entries: UpgradeEntry[] = [];
 
@@ -47,14 +52,7 @@ export async function upgradeAssets(
   }> = [];
 
   for (const [name, def] of Object.entries(config.assets)) {
-    // Filter by specific asset names if provided
-    if (
-      options.assetNames &&
-      options.assetNames.length > 0 &&
-      !options.assetNames.includes(name)
-    ) {
-      continue;
-    }
+    if (!applicableNames.has(name)) continue;
 
     if (!def.version) continue;
 
@@ -140,9 +138,13 @@ export async function upgradeAssets(
     };
   }
 
-  // Perform upgrades by re-fetching with force
+  // Perform upgrades by re-fetching with force and explicit version overrides
   if (assetsToUpgrade.length > 0) {
     const assetNames = assetsToUpgrade.map((a) => a.name);
+    const versionOverrides: Record<string, string> = {};
+    for (const a of assetsToUpgrade) {
+      versionOverrides[a.name] = a.newVersion;
+    }
 
     const fetchResult = await fetchAssets({
       env,
@@ -150,6 +152,7 @@ export async function upgradeAssets(
       force: true,
       configPath: options.configPath,
       assetNames,
+      versionOverrides,
       quiet: false,
     });
 

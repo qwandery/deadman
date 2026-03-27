@@ -37,14 +37,14 @@ export async function verifyAssets(options: VerifyOptions): Promise<VerifyResult
   };
 
   for (const asset of assets) {
-    const destPath = resolve(asset.dest);
+    const destPath = resolve(asset.finalDest);
 
     if (!existsSync(destPath)) {
       result.missing++;
       result.details.push({
         name: asset.name,
         status: "missing",
-        message: `Not found at ${asset.dest}`,
+        message: `Not found at ${asset.finalDest}`,
       });
       if (!options.quiet) {
         console.log(`  [MISSING] ${asset.name} — ${asset.dest}`);

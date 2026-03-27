@@ -35,12 +35,17 @@ export function createFetchCommand(): Command {
     .option("--allow-insecure", "Allow HTTP downloads", false)
     .action(async (assetNames: string[], opts) => {
       try {
+        const parallel = parseInt(opts.parallel, 10);
+        if (isNaN(parallel) || parallel < 1) {
+          console.error(`Error: --parallel must be a positive integer, got '${opts.parallel}'`);
+          process.exit(ExitCode.CONFIG_ERROR);
+        }
         const result = await fetchAssets({
           env: opts.env,
           platform: opts.platform,
           force: opts.force,
           dryRun: opts.dryRun,
-          parallel: parseInt(opts.parallel, 10),
+          parallel,
           configPath: opts.config,
           quiet: opts.quiet,
           verbose: opts.verbose,
@@ -330,13 +335,23 @@ export function createAuditCommand(): Command {
     .option("--critical-threshold <n>", "Versions behind for critical", "10")
     .action(async (opts) => {
       try {
+        const warnThreshold = parseInt(opts.warnThreshold, 10);
+        const criticalThreshold = parseInt(opts.criticalThreshold, 10);
+        if (isNaN(warnThreshold) || warnThreshold < 1) {
+          console.error(`Error: --warn-threshold must be a positive integer, got '${opts.warnThreshold}'`);
+          process.exit(ExitCode.CONFIG_ERROR);
+        }
+        if (isNaN(criticalThreshold) || criticalThreshold < 1) {
+          console.error(`Error: --critical-threshold must be a positive integer, got '${opts.criticalThreshold}'`);
+          process.exit(ExitCode.CONFIG_ERROR);
+        }
         const result = await auditAssets({
           env: opts.env,
           platform: opts.platform,
           configPath: opts.config,
           json: opts.json,
-          warnThreshold: parseInt(opts.warnThreshold, 10),
-          criticalThreshold: parseInt(opts.criticalThreshold, 10),
+          warnThreshold,
+          criticalThreshold,
         });
 
         if (opts.json) {

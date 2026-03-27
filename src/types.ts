@@ -101,6 +101,8 @@ export interface ResolvedAsset {
   };
   /** Resolved concrete version (config v2) */
   version?: string;
+  /** Final on-disk path after rename (equals dest when no rename) */
+  finalDest: string;
 }
 
 /** Previous version record for rollback support */
@@ -163,6 +165,8 @@ export interface FetchOptions {
   verbose?: boolean;
   allowInsecure?: boolean;
   assetNames?: string[];
+  /** Override resolved versions for specific assets (used by upgrade/rollback) */
+  versionOverrides?: Record<string, string>;
 }
 
 /** Verify options */

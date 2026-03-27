@@ -11,7 +11,7 @@ import type {
   PlatformId,
 } from "../types.js";
 import { loadConfig } from "../config/loader.js";
-import { resolveAssets } from "../config/resolver.js";
+import { resolveAssetsAsync, applyVersionOverrides } from "../config/resolver.js";
 import { detectPlatform, parsePlatform } from "../utils/platform.js";
 import { sha256File, sha256String } from "../utils/hash.js";
 import { downloadFile } from "./downloader.js";
@@ -41,7 +41,13 @@ export async function fetchAssets(options: FetchOptions): Promise<FetchResult> {
     : detectPlatform();
   const env = options.env || process.env.DEADMAN_ENV || "dev";
 
-  const assets = resolveAssets(config, platform, env, options.assetNames);
+  let assets = await resolveAssetsAsync(config, platform, env, options.assetNames);
+
+  // Apply version overrides (used by upgrade/rollback to force specific versions)
+  if (options.versionOverrides) {
+    assets = applyVersionOverrides(assets, options.versionOverrides, config, platform);
+  }
+
   const configHash = sha256String(rawContent);
 
   // Read existing lock file for skip-if-valid

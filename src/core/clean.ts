@@ -29,18 +29,29 @@ export async function cleanAssets(options: CleanOptions): Promise<CleanResult> {
 
   if (options.all) {
     // Resolve for all environments to get all possible assets
-    for (const [name, def] of Object.entries(config.assets)) {
-      if (options.assetNames?.length && !options.assetNames.includes(name)) {
-        continue;
+    // Use a set of all known environments to resolve all assets with finalDest
+    const envSet = new Set<string>();
+    for (const def of Object.values(config.assets)) {
+      if (def.environments) {
+        for (const e of def.environments) envSet.add(e);
       }
-      if (def.dest) {
-        assetsToClean.push({ name, dest: def.dest });
+    }
+    if (envSet.size === 0) envSet.add("dev");
+
+    const seen = new Set<string>();
+    for (const e of envSet) {
+      const assets = resolveAssets(config, platform, e, options.assetNames);
+      for (const asset of assets) {
+        if (!seen.has(asset.name)) {
+          seen.add(asset.name);
+          assetsToClean.push({ name: asset.name, dest: asset.finalDest });
+        }
       }
     }
   } else {
     const assets = resolveAssets(config, platform, env || "dev", options.assetNames);
     for (const asset of assets) {
-      assetsToClean.push({ name: asset.name, dest: asset.dest });
+      assetsToClean.push({ name: asset.name, dest: asset.finalDest });
     }
   }
 

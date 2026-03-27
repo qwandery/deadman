@@ -37,17 +37,19 @@ export function validateConfig(raw: unknown): DeadManConfig {
   }
 
   const configVersion = obj.version as number;
+  const defaults = obj.defaults as Record<string, unknown> | undefined;
+  const hasDefaultDest = !!(defaults && typeof defaults.dest_dir === "string");
 
   // Validate each asset
   const assets = obj.assets as Record<string, unknown>;
   for (const [name, asset] of Object.entries(assets)) {
-    validateAsset(name, asset, configVersion);
+    validateAsset(name, asset, configVersion, hasDefaultDest);
   }
 
   return obj as unknown as DeadManConfig;
 }
 
-function validateAsset(name: string, raw: unknown, configVersion: number): void {
+function validateAsset(name: string, raw: unknown, configVersion: number, hasDefaultDest: boolean): void {
   if (!raw || typeof raw !== "object") {
     throw new Error(`Asset '${name}' must be an object`);
   }
@@ -136,9 +138,9 @@ function validateAsset(name: string, raw: unknown, configVersion: number): void 
     }
   }
 
-  // dest is required unless platforms provide it
-  if (!asset.dest && !hasPlatforms && !hasBuild) {
-    throw new Error(`Asset '${name}' must have a 'dest' field`);
+  // dest is required unless platforms provide it or defaults.dest_dir is set
+  if (!asset.dest && !hasPlatforms && !hasBuild && !hasDefaultDest) {
+    throw new Error(`Asset '${name}' must have a 'dest' field (or set defaults.dest_dir)`);
   }
 
   // Validate version constraint (config v2 only)

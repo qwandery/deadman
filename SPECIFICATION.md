@@ -1,7 +1,7 @@
 # DeadMan — Dead-Ass Simple Tool & Asset Management
 
-**Version:** 1.0  
-**Date:** March 4, 2026  
+**Version:** 2.0
+**Date:** March 27, 2026
 **Author:** Brian Lacy (Qwandery Inc.)
 **License:** MIT
 
@@ -117,7 +117,7 @@ Or specify explicitly: `deadman fetch --config path/to/config.yaml`
 ### Top-Level Structure
 
 ```yaml
-version: 1                    # Config format version (required)
+version: 2                    # Config format version (required, 1 or 2)
 
 defaults:                     # Optional defaults for all assets
   base_url: "https://..."     # Prepended to relative URLs
@@ -127,6 +127,8 @@ assets:                       # Asset definitions (required)
   asset-name:
     ...
 ```
+
+Config version 1 remains fully supported. Version 2 enables version management features (version constraints, outdated/upgrade/rollback commands). All v1 configs work unchanged.
 
 ### Asset Definition
 
@@ -266,14 +268,83 @@ Available template variables:
 - `${platform}` — Full platform string (e.g., darwin-arm64)
 - `${os}` — Operating system (darwin, win32, linux)
 - `${arch}` — Architecture (arm64, x64)
-- `${version}` — From variables section
+- `${version}` — From variables section, or resolved from version constraint (v2)
 - Any custom variable defined in `variables`
+
+### Version Constraints (Config v2)
+
+Config version 2 adds first-class version management. Each asset can declare a `version` field that tells DeadMan how to discover and resolve versions.
+
+**Exact version pin** (string shorthand):
+
+```yaml
+version: 2
+assets:
+  ffmpeg:
+    version: "7.1.0"
+    url: "https://example.com/ffmpeg-${version}-arm64.zip"
+    sha256: "abc123..."
+    dest: "vendor/ffmpeg"
+```
+
+The `${version}` template variable is automatically populated from the resolved version.
+
+**Semver range with GitHub source:**
+
+```yaml
+version: 2
+assets:
+  ffmpeg:
+    version:
+      range: "^7.0"
+      source:
+        github: "BtbN/FFmpeg-Builds"
+    platforms:
+      darwin-arm64:
+        url: "https://github.com/BtbN/FFmpeg-Builds/releases/download/v${version}/ffmpeg-${version}-macOS-arm64.zip"
+        sha256: "..."
+        dest: "vendor/ffmpeg"
+```
+
+**Version constraint fields:**
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `range` | string | Semver range (`^1.0.0`, `~2.5`, `>=1.0 <2.0`), exact pin (`1.2.3`), or `"latest"` |
+| `source.github` | string | GitHub repository (`owner/repo`) — discovers versions from GitHub Releases |
+| `source.manifest` | string | URL to a JSON version manifest |
+| `source.pattern` | string | URL template with `${version}` for HEAD-request probing |
+
+**Supported semver range syntax:**
+- `^1.0.0` — Compatible with 1.x.x (>=1.0.0, <2.0.0)
+- `~1.5.0` — Approximately 1.5.x (>=1.5.0, <1.6.0)
+- `>=2.0.0` — Greater than or equal to 2.0.0
+- `>=1.0.0 <3.0.0` — Range between versions
+- `1.2.3` — Exact pin
+- `latest` — Most recent stable (non-prerelease) version
+
+**Version manifest format** (for `source.manifest`):
+
+```json
+{
+  "versions": {
+    "7.1.0": {
+      "platforms": {
+        "darwin-arm64": { "url": "https://...", "sha256": "..." },
+        "win32-x64": { "url": "https://...", "sha256": "..." }
+      }
+    }
+  }
+}
+```
 
 ---
 
 ## Manifest: deadman.lock
 
-After fetching, DeadMan writes a lock file recording the current state:
+After fetching, DeadMan writes a lock file recording the current state.
+
+**Lockfile v1** (config version 1):
 
 ```yaml
 generated_at: "2026-03-04T15:30:00Z"
@@ -288,14 +359,33 @@ assets:
     sha256: "def456..."
     fetched_at: "2026-03-04T15:30:00Z"
     source: "https://evermeet.cx/ffmpeg/ffmpeg-7.1-arm64.zip"
-    
-  whisper-cpp:
-    status: present
-    path: "vendor/whisper-cpp"
-    sha256: "789xyz..."
-    fetched_at: "2026-03-04T15:28:00Z"
-    source: "https://.../whisper-darwin-arm64"
 ```
+
+**Lockfile v2** (config version 2, with version metadata):
+
+```yaml
+lockfile_version: 2
+generated_at: "2026-03-27T15:30:00Z"
+platform: darwin-arm64
+environment: dev
+config_hash: "sha256:abc123..."
+
+assets:
+  ffmpeg:
+    status: present
+    path: "vendor/ffmpeg"
+    sha256: "def456..."
+    fetched_at: "2026-03-27T15:30:00Z"
+    source: "https://github.com/BtbN/FFmpeg-Builds/releases/download/v7.1.0/..."
+    version: "7.1.0"
+    version_constraint: "^7.0"
+    previous_versions:
+      - version: "7.0.2"
+        sha256: "789abc..."
+        fetched_at: "2026-03-20T15:30:00Z"
+```
+
+The `previous_versions` array (bounded to 3 entries) enables rollback. When an asset is upgraded, the current entry is preserved in history. V1 lockfiles are auto-upgraded to v2 on the next write.
 
 ### Lock File Uses
 
@@ -418,6 +508,14 @@ model-large    darwin-arm64  prod  missing   -         models/large.bin
 presidio-cli   darwin-arm64  all   invalid   -         vendor/presidio-cli
 ```
 
+When version metadata is present in the lockfile (config v2), a VERSION column is shown:
+
+```
+ASSET          VERSION   PLATFORM      ENV   STATUS    SIZE      PATH
+ffmpeg         7.1.0     darwin-arm64  all   present   85.2 MB   vendor/ffmpeg
+whisper-cpp    1.7.2     darwin-arm64  all   present   4.2 MB    vendor/whisper-cpp
+```
+
 ### deadman clean
 
 Remove fetched assets.
@@ -469,6 +567,121 @@ deadman hash <file>
 
 Useful when adding new assets to config.
 
+### deadman outdated
+
+Check for available asset version updates (config v2).
+
+```
+deadman outdated [options]
+
+Options:
+  --env <environment>   Environment to check (default: dev)
+  --platform <platform> Platform to check
+  --config <path>       Config file path
+  --json                Output as JSON
+```
+
+**Example Output:**
+
+```
+ASSET          CURRENT   LATEST    CONSTRAINT
+ffmpeg         7.0.2     7.1.0     ^7.0
+whisper-cpp    1.5.4     1.7.2     ^1.5
+presidio       2.2.0     2.2.0     ^2.0        (up to date)
+```
+
+Only assets with a version source (e.g., `source.github`) are checked. Assets with exact pins or no version field are skipped.
+
+### deadman upgrade
+
+Upgrade versioned assets to their latest matching versions (config v2).
+
+```
+deadman upgrade [options] [asset-names...]
+
+Arguments:
+  asset-names           Specific assets to upgrade (default: all)
+
+Options:
+  --env <environment>   Environment (default: dev)
+  --platform <platform> Platform
+  --config <path>       Config file path
+  --dry-run             Preview without changing anything
+  --major               Allow major version bumps
+```
+
+**Examples:**
+
+```bash
+# Upgrade all versioned assets
+deadman upgrade
+
+# Upgrade specific asset
+deadman upgrade ffmpeg
+
+# Preview upgrades
+deadman upgrade --dry-run
+
+# Allow major version bumps
+deadman upgrade --major
+```
+
+By default, major version bumps are blocked. Use `--major` to allow them.
+
+### deadman rollback
+
+Roll back an asset to a previous version (config v2).
+
+```
+deadman rollback <asset-name> [options]
+
+Arguments:
+  asset-name            Asset to roll back (required)
+
+Options:
+  --to <version>        Target version (default: most recent previous)
+  --config <path>       Config file path
+```
+
+**Examples:**
+
+```bash
+# Roll back to previous version
+deadman rollback ffmpeg
+
+# Roll back to a specific version
+deadman rollback ffmpeg --to 7.0.2
+```
+
+Rollback history is stored in the lockfile (up to 3 previous versions).
+
+### deadman audit
+
+Audit versioned assets for age and update status (config v2).
+
+```
+deadman audit [options]
+
+Options:
+  --env <environment>         Environment (default: dev)
+  --platform <platform>       Platform
+  --config <path>             Config file path
+  --json                      Output as JSON
+  --warn-threshold <n>        Versions behind to warn (default: 5)
+  --critical-threshold <n>    Versions behind for critical (default: 10)
+```
+
+**Example Output:**
+
+```
+ASSET          CURRENT   LATEST    BEHIND  SEVERITY  MESSAGE
+ffmpeg         7.0.2     7.1.0     1       info      1 version behind
+whisper-cpp    1.2.0     1.7.2     12      critical  12 versions behind — strongly recommend updating
+presidio       2.2.0     2.2.0     0       ok        Up to date
+```
+
+Exit code 1 if any critical issues are found.
+
 ---
 
 ## Platforms
@@ -514,6 +727,8 @@ Default is `dev`. Set via `--env` or `DEADMAN_ENV` environment variable.
 | 4 | File system error (permission denied, disk full) |
 | 5 | Build command failed |
 | 6 | Checksum mismatch |
+| 7 | Version resolution failed |
+| 8 | Upgrade failed |
 
 ---
 
@@ -527,6 +742,8 @@ Default is `dev`. Set via `--env` or `DEADMAN_ENV` environment variable.
 | DEADMAN_PARALLEL | Default parallel downloads |
 | DEADMAN_QUIET | Set to 1 for quiet mode |
 | DEADMAN_VERBOSE | Set to 1 for verbose mode |
+| GITHUB_TOKEN | GitHub API token for rate limit avoidance (version sources) |
+| DEADMAN_VERSION_CACHE_TTL | Cache TTL in seconds for version queries (default: 3600) |
 
 ---
 
@@ -650,6 +867,16 @@ Build assets run local commands that are defined in your config file, not remote
 
 The lock file records exactly what was fetched and from where. Review it to audit your dependencies.
 
+### Version Source Integrity (Config v2)
+
+When using version constraints with external sources:
+
+- **HTTPS only** — All version source API calls use HTTPS (GitHub API, manifest URLs).
+- **Checksum manifest auto-detection** — When fetching from GitHub Releases, DeadMan automatically looks for `SHA256SUMS` or `checksums.txt` release assets and can cross-reference downloaded file hashes.
+- **Version age warnings** — `deadman audit` flags assets that are many versions behind, helping identify potentially vulnerable dependencies.
+- **Rate limit protection** — Set `GITHUB_TOKEN` to avoid GitHub API rate limits. Version query results are cached (default: 1 hour, configurable via `DEADMAN_VERSION_CACHE_TTL`).
+- **Signature verification** (planned) — Future support for GPG/Minisign signature verification of downloaded assets.
+
 ---
 
 ## Comparison with Other Tools
@@ -676,9 +903,11 @@ DeadMan is implemented in TypeScript and compiled to a standalone binary using a
 ### Dependencies
 
 Minimal external dependencies:
-- YAML parser
-- Archive extraction (tar, unzip)
-- HTTP client (built-in node:https or fetch)
+- YAML parser (yaml)
+- Archive extraction (tar, adm-zip)
+- Semver resolution (semver)
+- CLI framework (commander)
+- HTTP client (built-in fetch)
 - Crypto (built-in node:crypto for sha256)
 
 No framework dependencies. No runtime dependencies for standalone binary.
@@ -698,31 +927,42 @@ Target: < 5 MB for standalone binary.
 
 ## Roadmap
 
-### v1.0 (Initial Release)
+### v1.0 (Initial Release) — Complete
 - Core fetch/verify/list/clean commands
 - Platform and environment filtering
 - Archive extraction
 - Lock file generation
 - npm package distribution
 
-### v1.1
-- Standalone binary distribution
+### v1.1 — Complete
 - URL templates with variables
 - `deadman init` command
 - `deadman hash` utility
 
-### v1.2
+### v2.0 — Version Management — Complete
+- Config format v2 with version constraints (semver ranges, exact pins, "latest")
+- Version source providers: GitHub Releases, static manifests, URL pattern probing
+- `deadman outdated` — check for available updates
+- `deadman upgrade` — upgrade assets to latest matching versions
+- `deadman rollback` — revert to previous versions
+- `deadman audit` — audit assets for age and update status
+- Lockfile v2 with version metadata and rollback history
+- Version query caching with configurable TTL
+- Automatic checksum manifest detection from GitHub release assets
+
+### v2.1
+- Signature verification (GPG/Minisign)
 - Mirror/fallback URLs
 - Progress bars for large downloads
 - Resume interrupted downloads
 - Proxy support
 
 ### Future Considerations
-- Signed checksums (GPG verification)
 - Private repository authentication
 - Asset groups/tags
 - Watch mode (re-fetch on config change)
 - Plugin system for custom sources
+- Standalone binary distribution
 
 ---
 
@@ -822,8 +1062,77 @@ assets:
 
 ---
 
+## Example: Version-Managed Config (v2)
+
+```yaml
+version: 2
+
+defaults:
+  dest_dir: "vendor"
+
+assets:
+  # Version-managed binary from GitHub Releases
+  whisper-cpp:
+    description: "Whisper.cpp speech recognition"
+    executable: true
+    version:
+      range: "^1.5"
+      source:
+        github: "ggerganov/whisper.cpp"
+    platforms:
+      darwin-arm64:
+        url: "https://github.com/ggerganov/whisper.cpp/releases/download/v${version}/whisper-v${version}-darwin-arm64"
+        sha256: "a1b2c3d4e5f6..."
+        dest: "vendor/whisper-cpp"
+      win32-x64:
+        url: "https://github.com/ggerganov/whisper.cpp/releases/download/v${version}/whisper-v${version}-win64.exe"
+        sha256: "c3d4e5f6a1b2..."
+        dest: "vendor/whisper-cpp.exe"
+
+  # Version-managed with exact pin
+  ffmpeg:
+    description: "FFmpeg audio converter"
+    version: "7.1.0"
+    executable: true
+    platforms:
+      darwin-arm64:
+        url: "https://evermeet.cx/ffmpeg/ffmpeg-${version}-arm64.zip"
+        sha256: "e5f6a1b2c3d4..."
+        extract: "ffmpeg"
+        dest: "vendor/ffmpeg"
+      win32-x64:
+        url: "https://www.gyan.dev/ffmpeg/builds/ffmpeg-${version}-essentials.zip"
+        sha256: "f6a1b2c3d4e5..."
+        extract: "ffmpeg-${version}-essentials/bin/ffmpeg.exe"
+        dest: "vendor/ffmpeg.exe"
+
+  # Build-based asset (no version management)
+  presidio-cli:
+    description: "Presidio PII detection (built locally)"
+    executable: true
+    dest: "vendor/presidio-cli"
+    build:
+      command: "./scripts/build-presidio.sh"
+      platforms:
+        win32-x64:
+          command: "powershell -File scripts/build-presidio.ps1"
+      check: "vendor/presidio-cli"
+      sha256: false
+
+  # Environment-specific models (no version management)
+  model-tiny:
+    description: "Whisper tiny.en (development)"
+    environments: [dev]
+    url: "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-tiny.en.bin"
+    sha256: "1a2b3c4d5e6f..."
+    dest: "models/ggml-tiny.en.bin"
+```
+
+---
+
 ## Document Revision History
 
 | Version | Date | Author | Changes |
 |---------|------|--------|---------|
 | 1.0 | 2026-03-04 | Brian Lacy | Initial specification |
+| 2.0 | 2026-03-27 | Brian Lacy | Version management system: config v2, lockfile v2, version constraints, outdated/upgrade/rollback/audit commands, GitHub/manifest/pattern providers |

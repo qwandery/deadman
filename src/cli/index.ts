@@ -6,6 +6,10 @@ import {
   createCleanCommand,
   createInitCommand,
   createHashCommand,
+  createOutdatedCommand,
+  createUpgradeCommand,
+  createRollbackCommand,
+  createAuditCommand,
 } from "./commands.js";
 
 /** Create the main CLI program */
@@ -25,6 +29,10 @@ export function createProgram(): Command {
   program.addCommand(createCleanCommand());
   program.addCommand(createInitCommand());
   program.addCommand(createHashCommand());
+  program.addCommand(createOutdatedCommand());
+  program.addCommand(createUpgradeCommand());
+  program.addCommand(createRollbackCommand());
+  program.addCommand(createAuditCommand());
 
   return program;
 }

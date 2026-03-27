@@ -2,7 +2,7 @@ import { readFile, writeFile, rm } from "node:fs/promises";
 import { existsSync } from "node:fs";
 import { resolve } from "node:path";
 import { parse as parseYaml, stringify as stringifyYaml } from "yaml";
-import type { LockFile, LockFileAsset } from "../types.js";
+import type { LockFile, LockFileAsset, PreviousVersion } from "../types.js";
 
 const LOCK_FILENAME = "deadman.lock";
 
@@ -48,6 +48,7 @@ export function createLockFile(
   configHash: string
 ): LockFile {
   return {
+    lockfile_version: 2,
     generated_at: new Date().toISOString(),
     platform,
     environment,
@@ -56,12 +57,56 @@ export function createLockFile(
   };
 }
 
+/** Maximum number of previous versions to keep for rollback */
+const MAX_PREVIOUS_VERSIONS = 3;
+
 /** Update a lock file with an asset entry */
 export function setLockFileAsset(
   lockFile: LockFile,
   name: string,
   entry: LockFileAsset
 ): void {
+  lockFile.assets[name] = entry;
+  lockFile.generated_at = new Date().toISOString();
+}
+
+/** Update a lock file asset with version metadata, preserving rollback history */
+export function setLockFileAssetWithVersion(
+  lockFile: LockFile,
+  name: string,
+  entry: LockFileAsset,
+  version?: string,
+  versionConstraint?: string
+): void {
+  const existing = lockFile.assets[name];
+
+  // Build previous_versions from existing entry
+  let previousVersions: PreviousVersion[] = [];
+  if (
+    existing &&
+    existing.version &&
+    existing.sha256 &&
+    existing.fetched_at &&
+    existing.version !== version
+  ) {
+    previousVersions = [
+      {
+        version: existing.version,
+        sha256: existing.sha256,
+        fetched_at: existing.fetched_at,
+      },
+      ...(existing.previous_versions || []),
+    ].slice(0, MAX_PREVIOUS_VERSIONS);
+  } else if (existing?.previous_versions) {
+    previousVersions = existing.previous_versions;
+  }
+
+  entry.version = version;
+  entry.version_constraint = versionConstraint;
+  if (previousVersions.length > 0) {
+    entry.previous_versions = previousVersions;
+  }
+
   lockFile.assets[name] = entry;
   lockFile.generated_at = new Date().toISOString();
 }

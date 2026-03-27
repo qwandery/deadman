@@ -20,6 +20,7 @@ import { executeBuild } from "./builder.js";
 import {
   createLockFile,
   setLockFileAsset,
+  setLockFileAssetWithVersion,
   writeLockFile,
   readLockFile,
 } from "./lockfile.js";
@@ -241,13 +242,24 @@ async function fetchSingleAsset(
       );
     }
 
-    setLockFileAsset(opts.lockFile, asset.name, {
-      status: "present",
+    const lockEntry = {
+      status: "present" as const,
       path: asset.rename ? pathJoin(dirname(asset.dest), asset.rename) : asset.dest,
       sha256: dlResult.sha256,
       fetched_at: new Date().toISOString(),
       source: asset.url,
-    });
+    };
+
+    if (asset.version) {
+      setLockFileAssetWithVersion(
+        opts.lockFile,
+        asset.name,
+        lockEntry,
+        asset.version
+      );
+    } else {
+      setLockFileAsset(opts.lockFile, asset.name, lockEntry);
+    }
 
     return "fetched";
   } catch (err) {

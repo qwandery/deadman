@@ -6,6 +6,10 @@ import { listAssets, formatListTable } from "../core/list.js";
 import { cleanAssets } from "../core/clean.js";
 import { initConfig } from "../core/init.js";
 import { sha256File } from "../utils/hash.js";
+import { checkOutdated, formatOutdatedTable } from "../core/outdated.js";
+import { upgradeAssets } from "../core/upgrade.js";
+import { rollbackAsset } from "../core/rollback.js";
+import { auditAssets, formatAuditTable } from "../core/audit.js";
 
 /** Read environment variable defaults */
 function envDefault<T>(envVar: string, fallback: T): T {
@@ -203,6 +207,158 @@ export function createHashCommand(): Command {
         const message = err instanceof Error ? err.message : String(err);
         console.error(`Error: ${message}`);
         process.exit(ExitCode.FILESYSTEM_ERROR);
+      }
+    });
+}
+
+export function createOutdatedCommand(): Command {
+  return new Command("outdated")
+    .description("Check for available asset version updates")
+    .option("--env <environment>", "Environment to check", process.env.DEADMAN_ENV || "dev")
+    .option("--platform <platform>", "Platform to check")
+    .option("--config <path>", "Config file path", process.env.DEADMAN_CONFIG)
+    .option("--json", "Output as JSON", false)
+    .action(async (opts) => {
+      try {
+        const result = await checkOutdated({
+          env: opts.env,
+          platform: opts.platform,
+          configPath: opts.config,
+          json: opts.json,
+        });
+
+        if (opts.json) {
+          console.log(JSON.stringify(result, null, 2));
+        } else {
+          console.log(formatOutdatedTable(result));
+          if (result.totalOutdated > 0) {
+            console.log(
+              `\n${result.totalOutdated} of ${result.totalChecked} versioned assets can be updated.`
+            );
+          }
+        }
+      } catch (err) {
+        const message = err instanceof Error ? err.message : String(err);
+        console.error(`Error: ${message}`);
+        if (message.includes("rate limit")) {
+          process.exit(ExitCode.NETWORK_ERROR);
+        }
+        process.exit(ExitCode.VERSION_RESOLUTION_FAILED);
+      }
+    });
+}
+
+export function createUpgradeCommand(): Command {
+  return new Command("upgrade")
+    .description("Upgrade versioned assets to their latest matching versions")
+    .argument("[asset-names...]", "Specific assets to upgrade (default: all)")
+    .option("--env <environment>", "Environment", process.env.DEADMAN_ENV || "dev")
+    .option("--platform <platform>", "Platform")
+    .option("--config <path>", "Config file path", process.env.DEADMAN_CONFIG)
+    .option("--dry-run", "Preview without changing anything", false)
+    .option("--major", "Allow major version bumps", false)
+    .action(async (assetNames: string[], opts) => {
+      try {
+        const result = await upgradeAssets({
+          env: opts.env,
+          platform: opts.platform,
+          configPath: opts.config,
+          dryRun: opts.dryRun,
+          major: opts.major,
+          assetNames: assetNames.length > 0 ? assetNames : undefined,
+        });
+
+        console.log(
+          `\nUpgrade complete: ${result.totalUpgraded} upgraded, ${result.totalSkipped} skipped, ${result.totalFailed} failed`
+        );
+
+        if (result.totalFailed > 0) {
+          for (const entry of result.entries.filter(
+            (e) => e.status === "failed"
+          )) {
+            console.error(`  Error: ${entry.name} — ${entry.error}`);
+          }
+          process.exit(ExitCode.UPGRADE_FAILED);
+        }
+      } catch (err) {
+        const message = err instanceof Error ? err.message : String(err);
+        console.error(`Error: ${message}`);
+        process.exit(ExitCode.UPGRADE_FAILED);
+      }
+    });
+}
+
+export function createRollbackCommand(): Command {
+  return new Command("rollback")
+    .description("Roll back an asset to a previous version")
+    .argument("<asset-name>", "Asset to roll back")
+    .option("--to <version>", "Target version (default: previous)")
+    .option("--config <path>", "Config file path", process.env.DEADMAN_CONFIG)
+    .action(async (assetName: string, opts) => {
+      try {
+        const result = await rollbackAsset({
+          assetName,
+          target: opts.to,
+          configPath: opts.config,
+        });
+
+        if (result.status === "rolled_back") {
+          console.log(
+            `  [rollback] ${result.name} ${result.from || "unknown"} -> ${result.to}`
+          );
+          console.log("Rollback complete.");
+        } else {
+          console.error(`Error: ${result.error}`);
+          process.exit(ExitCode.UPGRADE_FAILED);
+        }
+      } catch (err) {
+        const message = err instanceof Error ? err.message : String(err);
+        console.error(`Error: ${message}`);
+        process.exit(ExitCode.UPGRADE_FAILED);
+      }
+    });
+}
+
+export function createAuditCommand(): Command {
+  return new Command("audit")
+    .description("Audit versioned assets for age and update status")
+    .option("--env <environment>", "Environment", process.env.DEADMAN_ENV || "dev")
+    .option("--platform <platform>", "Platform")
+    .option("--config <path>", "Config file path", process.env.DEADMAN_CONFIG)
+    .option("--json", "Output as JSON", false)
+    .option("--warn-threshold <n>", "Versions behind to warn", "5")
+    .option("--critical-threshold <n>", "Versions behind for critical", "10")
+    .action(async (opts) => {
+      try {
+        const result = await auditAssets({
+          env: opts.env,
+          platform: opts.platform,
+          configPath: opts.config,
+          json: opts.json,
+          warnThreshold: parseInt(opts.warnThreshold, 10),
+          criticalThreshold: parseInt(opts.criticalThreshold, 10),
+        });
+
+        if (opts.json) {
+          console.log(JSON.stringify(result, null, 2));
+        } else {
+          console.log(formatAuditTable(result));
+          if (result.critical > 0) {
+            console.log(`\n${result.critical} critical issue(s) found.`);
+          } else if (result.warnings > 0) {
+            console.log(`\n${result.warnings} warning(s) found.`);
+          } else {
+            console.log("\nAll versioned assets are up to date.");
+          }
+        }
+
+        if (result.critical > 0) {
+          process.exit(ExitCode.VERIFICATION_FAILED);
+        }
+      } catch (err) {
+        const message = err instanceof Error ? err.message : String(err);
+        console.error(`Error: ${message}`);
+        process.exit(ExitCode.VERSION_RESOLUTION_FAILED);
       }
     });
 }

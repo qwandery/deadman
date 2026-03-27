@@ -21,6 +21,8 @@ export interface PlatformSource {
   extract?: string;
   dest?: string;
   rename?: string;
+  /** Per-platform version override (config v2) */
+  version?: string;
 }
 
 /** Build configuration for locally-built assets */
@@ -29,6 +31,24 @@ export interface BuildConfig {
   platforms?: Partial<Record<PlatformId, { command: string }>>;
   check?: string;
   sha256?: false;
+}
+
+/** Version source configuration — how deadman discovers available versions */
+export interface VersionSource {
+  /** GitHub releases: "owner/repo" */
+  github?: string;
+  /** Static manifest URL containing version->URL mappings */
+  manifest?: string;
+  /** URL pattern with ${version} placeholder for HEAD probing */
+  pattern?: string;
+}
+
+/** Version constraint for an asset (config v2) */
+export interface VersionConstraint {
+  /** Semver range ("^1.0.0", ">=2.0", "~3.1"), exact pin ("1.2.3"), or "latest" */
+  range: string;
+  /** Where to look for available versions */
+  source: VersionSource;
 }
 
 /** Single asset definition from config */
@@ -44,6 +64,8 @@ export interface AssetDefinition {
   rename?: string;
   executable?: boolean;
   build?: BuildConfig;
+  /** Version constraint (config v2): string for exact pin, object for range + source */
+  version?: string | VersionConstraint;
 }
 
 /** Top-level defaults section */
@@ -54,7 +76,8 @@ export interface ConfigDefaults {
 
 /** Top-level config structure */
 export interface DeadManConfig {
-  version: number;
+  /** Config format version: 1 (legacy) or 2 (version-aware) */
+  version: 1 | 2;
   defaults?: ConfigDefaults;
   variables?: Record<string, string>;
   assets: Record<string, AssetDefinition>;
@@ -76,6 +99,15 @@ export interface ResolvedAsset {
     check?: string;
     skipChecksum: boolean;
   };
+  /** Resolved concrete version (config v2) */
+  version?: string;
+}
+
+/** Previous version record for rollback support */
+export interface PreviousVersion {
+  version: string;
+  sha256: string;
+  fetched_at: string;
 }
 
 /** Lock file asset entry */
@@ -85,10 +117,18 @@ export interface LockFileAsset {
   sha256?: string;
   fetched_at?: string;
   source?: string;
+  /** Resolved version (lockfile v2) */
+  version?: string;
+  /** Version constraint used to resolve (lockfile v2) */
+  version_constraint?: string;
+  /** Previous versions for rollback (lockfile v2, max 3) */
+  previous_versions?: PreviousVersion[];
 }
 
 /** Lock file structure */
 export interface LockFile {
+  /** Lockfile format version: 1 (legacy) or 2 (version-aware) */
+  lockfile_version?: number;
   generated_at: string;
   platform: string;
   environment: string;
@@ -105,6 +145,8 @@ export const ExitCode = {
   FILESYSTEM_ERROR: 4,
   BUILD_FAILED: 5,
   CHECKSUM_MISMATCH: 6,
+  VERSION_RESOLUTION_FAILED: 7,
+  UPGRADE_FAILED: 8,
 } as const;
 
 export type ExitCodeValue = (typeof ExitCode)[keyof typeof ExitCode];
@@ -149,4 +191,33 @@ export interface CleanOptions {
   dryRun?: boolean;
   assetNames?: string[];
   platform?: PlatformId;
+}
+
+/** Outdated check options */
+export interface OutdatedOptions {
+  env?: string;
+  platform?: PlatformId;
+  configPath?: string;
+  json?: boolean;
+}
+
+/** Upgrade options */
+export interface UpgradeOptions {
+  env?: string;
+  platform?: PlatformId;
+  configPath?: string;
+  dryRun?: boolean;
+  assetNames?: string[];
+  /** Allow major version bumps */
+  major?: boolean;
+  /** Update SHA256 values in config file */
+  writeConfig?: boolean;
+}
+
+/** Rollback options */
+export interface RollbackOptions {
+  assetName: string;
+  configPath?: string;
+  /** Target version to roll back to, or "previous" */
+  target?: string;
 }

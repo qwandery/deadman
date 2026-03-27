@@ -16,5 +16,16 @@ export {
   deleteLockFile,
   createLockFile,
   setLockFileAsset,
+  setLockFileAssetWithVersion,
   getLockFilePath,
 } from "./lockfile.js";
+export { checkOutdated } from "./outdated.js";
+export type { OutdatedResult, OutdatedEntry } from "./outdated.js";
+export { upgradeAssets } from "./upgrade.js";
+export type { UpgradeResult, UpgradeEntry } from "./upgrade.js";
+export { rollbackAsset } from "./rollback.js";
+export type { RollbackResult } from "./rollback.js";
+export { auditAssets } from "./audit.js";
+export type { AuditResult, AuditEntry, AuditOptions } from "./audit.js";
+export { verifySignature } from "./signature.js";
+export type { SignatureConfig, SignatureResult } from "./signature.js";

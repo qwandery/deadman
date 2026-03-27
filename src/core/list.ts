@@ -6,6 +6,7 @@ import { loadConfig } from "../config/loader.js";
 import { resolveAssets } from "../config/resolver.js";
 import { detectPlatform, parsePlatform } from "../utils/platform.js";
 import { sha256File } from "../utils/hash.js";
+import { readLockFile } from "./lockfile.js";
 
 export interface ListEntry {
   name: string;
@@ -14,6 +15,7 @@ export interface ListEntry {
   status: "present" | "missing" | "invalid";
   size: string | null;
   path: string;
+  version?: string;
 }
 
 /** List all assets and their status */
@@ -25,6 +27,7 @@ export async function listAssets(options: ListOptions): Promise<ListEntry[]> {
   const env = options.env || process.env.DEADMAN_ENV || "dev";
 
   const assets = resolveAssets(config, platform, env);
+  const lockFile = await readLockFile();
   const entries: ListEntry[] = [];
 
   for (const asset of assets) {
@@ -63,6 +66,7 @@ export async function listAssets(options: ListOptions): Promise<ListEntry[]> {
       status,
       size,
       path: asset.dest,
+      version: lockFile?.assets[asset.name]?.version,
     });
   }
 
@@ -76,6 +80,23 @@ export async function listAssets(options: ListOptions): Promise<ListEntry[]> {
 
 /** Format table output for list command */
 export function formatListTable(entries: ListEntry[]): string {
+  const hasVersions = entries.some((e) => e.version);
+
+  if (hasVersions) {
+    const header =
+      "ASSET          VERSION   PLATFORM      ENV   STATUS    SIZE      PATH";
+    const lines = entries.map((e) => {
+      const name = e.name.padEnd(15);
+      const ver = (e.version || "-").padEnd(10);
+      const plat = e.platform.padEnd(14);
+      const env = e.environment.padEnd(6);
+      const status = e.status.padEnd(10);
+      const size = (e.size || "-").padEnd(10);
+      return `${name}${ver}${plat}${env}${status}${size}${e.path}`;
+    });
+    return [header, ...lines].join("\n");
+  }
+
   const header = "ASSET          PLATFORM      ENV   STATUS    SIZE      PATH";
   const lines = entries.map((e) => {
     const name = e.name.padEnd(15);

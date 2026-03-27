@@ -13,8 +13,8 @@ export function validateConfig(raw: unknown): DeadManConfig {
   if (obj.version === undefined) {
     throw new Error("Config missing required field: version");
   }
-  if (obj.version !== 1) {
-    throw new Error(`Unsupported config version: ${obj.version}. Only version 1 is supported.`);
+  if (obj.version !== 1 && obj.version !== 2) {
+    throw new Error(`Unsupported config version: ${obj.version}. Supported versions: 1, 2.`);
   }
 
   // assets is required
@@ -36,16 +36,18 @@ export function validateConfig(raw: unknown): DeadManConfig {
     }
   }
 
+  const configVersion = obj.version as number;
+
   // Validate each asset
   const assets = obj.assets as Record<string, unknown>;
   for (const [name, asset] of Object.entries(assets)) {
-    validateAsset(name, asset);
+    validateAsset(name, asset, configVersion);
   }
 
   return obj as unknown as DeadManConfig;
 }
 
-function validateAsset(name: string, raw: unknown): void {
+function validateAsset(name: string, raw: unknown, configVersion: number): void {
   if (!raw || typeof raw !== "object") {
     throw new Error(`Asset '${name}' must be an object`);
   }
@@ -138,6 +140,64 @@ function validateAsset(name: string, raw: unknown): void {
   if (!asset.dest && !hasPlatforms && !hasBuild) {
     throw new Error(`Asset '${name}' must have a 'dest' field`);
   }
+
+  // Validate version constraint (config v2 only)
+  if (asset.version !== undefined) {
+    if (configVersion < 2) {
+      throw new Error(
+        `Asset '${name}' has a 'version' field but config version is ${configVersion}. ` +
+          `Set config version to 2 to use version constraints.`
+      );
+    }
+    validateVersionConstraint(name, asset.version);
+  }
+}
+
+function validateVersionConstraint(assetName: string, version: unknown): void {
+  // String shorthand: exact version pin
+  if (typeof version === "string") {
+    if (!version.trim()) {
+      throw new Error(`Asset '${assetName}': version string cannot be empty`);
+    }
+    return;
+  }
+
+  // Object: { range, source }
+  if (typeof version === "object" && version !== null) {
+    const vc = version as Record<string, unknown>;
+    if (typeof vc.range !== "string" || !vc.range.trim()) {
+      throw new Error(
+        `Asset '${assetName}': version constraint must have a non-empty 'range' string`
+      );
+    }
+    if (!vc.source || typeof vc.source !== "object") {
+      throw new Error(
+        `Asset '${assetName}': version constraint must have a 'source' object`
+      );
+    }
+    const source = vc.source as Record<string, unknown>;
+    const hasGithub = typeof source.github === "string";
+    const hasManifest = typeof source.manifest === "string";
+    const hasPattern = typeof source.pattern === "string";
+    if (!hasGithub && !hasManifest && !hasPattern) {
+      throw new Error(
+        `Asset '${assetName}': version source must have at least one of: github, manifest, pattern`
+      );
+    }
+    if (hasGithub) {
+      const parts = (source.github as string).split("/");
+      if (parts.length !== 2 || !parts[0] || !parts[1]) {
+        throw new Error(
+          `Asset '${assetName}': github source must be "owner/repo" format`
+        );
+      }
+    }
+    return;
+  }
+
+  throw new Error(
+    `Asset '${assetName}': version must be a string (exact pin) or object (range + source)`
+  );
 }
 
 /** Type guard to check if platforms is a source map (object) vs filter list (array) */

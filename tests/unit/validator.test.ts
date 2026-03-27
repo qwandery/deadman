@@ -25,8 +25,22 @@ describe("config validator", () => {
 
   it("should reject unsupported version", () => {
     expect(() =>
-      validateConfig({ version: 2, assets: { tool: { url: "a", sha256: "b", dest: "c" } } })
+      validateConfig({ version: 99, assets: { tool: { url: "a", sha256: "b", dest: "c" } } })
     ).toThrow("Unsupported config version");
+  });
+
+  it("should accept config version 2", () => {
+    const config = validateConfig({
+      version: 2,
+      assets: {
+        tool: {
+          url: "https://example.com/tool.tar.gz",
+          sha256: "abc123",
+          dest: "vendor/tool",
+        },
+      },
+    });
+    expect(config.version).toBe(2);
   });
 
   it("should reject missing assets", () => {

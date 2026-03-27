@@ -37,6 +37,7 @@
   "dependencies": {
     "adm-zip": "^0.5.16",
     "commander": "^13.1.0",
+    "semver": "^7.7.4",
     "tar": "^7.4.3",
     "yaml": "^2.7.0"
   },
@@ -44,6 +45,7 @@
     "@eslint/js": "^9.21.0",
     "@types/adm-zip": "^0.5.7",
     "@types/node": "^22.13.0",
+    "@types/semver": "^7.7.1",
     "eslint": "^9.21.0",
     "typescript": "^5.7.3",
     "typescript-eslint": "^8.25.0",
